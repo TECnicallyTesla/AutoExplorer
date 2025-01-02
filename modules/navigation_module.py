@@ -19,8 +19,20 @@ logger = logging.getLogger(__name__)
 if geteuid() != 0:
     print("\033[0;33mThe program needs to be run using sudo, otherwise hardware control may fail.\033[0m")
 
-# Set GPIO backend
-os.environ["GPIOZERO_PIN_FACTORY"] = "rpi"
+# Try different GPIO backends in order of preference
+gpio_backends = ['rpigpio', 'pigpio', 'native']
+for backend in gpio_backends:
+    try:
+        os.environ["GPIOZERO_PIN_FACTORY"] = backend
+        # Try to import the backend to verify it works
+        from gpiozero import Device
+        Device.ensure_pin_factory()
+        logger.info(f"Using GPIO backend: {backend}")
+        break
+    except Exception as e:
+        logger.warning(f"Failed to initialize GPIO backend {backend}: {e}")
+else:
+    logger.error("No suitable GPIO backend found. Please install one of: RPi.GPIO, pigpio, or gpiozero")
 
 @dataclass
 class MovementCommand:
@@ -53,6 +65,7 @@ class NavigationController:
         # Initialize PiCar-X hardware with retries
         max_retries = 3
         retry_delay = 1  # seconds
+        last_error = None
         
         for attempt in range(max_retries):
             try:
@@ -60,12 +73,17 @@ class NavigationController:
                 logger.info("PiCar-X hardware initialized successfully")
                 break
             except Exception as e:
+                last_error = str(e)
                 if attempt < max_retries - 1:
                     logger.warning(f"Failed to initialize PiCar-X hardware (attempt {attempt + 1}/{max_retries}): {e}")
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"Failed to initialize PiCar-X hardware after {max_retries} attempts: {e}")
-                    logger.error("Please check: 1) You are running with sudo, 2) I2C is enabled, 3) GPIO permissions are set")
+                    logger.error("Please check:")
+                    logger.error("1) You are running with sudo")
+                    logger.error("2) I2C is enabled (sudo raspi-config)")
+                    logger.error("3) Required packages are installed (sudo apt-get install python3-rpi.gpio python3-pigpio)")
+                    logger.error(f"Last error: {last_error}")
                     raise
         
         # Navigation parameters
