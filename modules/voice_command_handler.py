@@ -8,9 +8,14 @@ import math
 import threading
 from typing import Optional, Dict, Callable, Tuple
 import speech_recognition as sr
-from robot_hat import TTS
+from robot_hat import TTS, Music
+from os import geteuid
 
 from .navigation_module import NavigationController, MovementCommand
+
+# Check for root privileges
+if geteuid() != 0:
+    print("\033[0;33mThe program needs to be run using sudo, otherwise there may be no sound.\033[0m")
 
 class VoiceCommandHandler:
     def __init__(self, navigation_controller: NavigationController):
@@ -24,9 +29,11 @@ class VoiceCommandHandler:
         self._is_listening = False
         self._command_thread = None
         
-        # Initialize TTS
+        # Initialize TTS and Music
         self._tts = TTS()
+        self._music = Music()
         self._tts.lang("en-US")
+        self._music.music_set_volume(50)  # Default volume
         
         # Wake word to activate commands
         self._wake_word = "robot"

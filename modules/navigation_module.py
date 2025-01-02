@@ -6,10 +6,16 @@ import numpy as np
 import logging
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
+from picarx import Picarx
+from os import geteuid
+
 from modules.mapping_module import OccupancyGrid, RobotPose
-from picarx import Picarx  # Import PiCar-X SDK
 
 logger = logging.getLogger(__name__)
+
+# Check for root privileges
+if geteuid() != 0:
+    print("\033[0;33mThe program needs to be run using sudo, otherwise hardware control may fail.\033[0m")
 
 @dataclass
 class MovementCommand:
