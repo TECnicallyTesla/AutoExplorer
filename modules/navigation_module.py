@@ -14,6 +14,8 @@ import time
 
 from modules.mapping_module import OccupancyGrid, RobotPose
 
+# Enable debug logging
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Check for root privileges
@@ -28,22 +30,6 @@ def is_raspberry_pi():
     except:
         return False
 
-# Configure GPIO based on platform
-if is_raspberry_pi():
-    try:
-        import RPi.GPIO as GPIO
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        logger.info("Using RPi.GPIO backend")
-    except ImportError:
-        logger.error("RPi.GPIO not found. Please install with: sudo apt-get install python3-rpi.gpio")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Failed to initialize GPIO: {e}")
-        sys.exit(1)
-else:
-    logger.warning("Not running on a Raspberry Pi - hardware control will be simulated")
-
 @dataclass
 class MovementCommand:
     """Represents a movement command for the robot."""
@@ -52,16 +38,6 @@ class MovementCommand:
     duration: float  # Duration in seconds
 
 class NavigationController:
-    """
-    Efficient navigation controller with optimized path planning.
-    
-    Features:
-    - Cached motion primitives
-    - Vectorized collision checking
-    - Efficient A* implementation
-    - Dynamic obstacle avoidance
-    """
-    
     def __init__(self, grid: OccupancyGrid) -> None:
         """
         Initialize the navigation controller.
@@ -71,45 +47,16 @@ class NavigationController:
         """
         self.grid = grid
         self._current_pose = RobotPose(x=0.0, y=0.0, theta=0.0)
+        self.picar = None
         
-        # Initialize PiCar-X hardware with retries
-        max_retries = 3
-        retry_delay = 1  # seconds
-        last_error = None
-        
-        for attempt in range(max_retries):
-            try:
-                if not is_raspberry_pi():
-                    logger.warning("Running in simulation mode - no hardware control available")
-                    break
-                
-                # Reset MCU manually before initializing PiCar-X
-                try:
-                    GPIO.setup(26, GPIO.OUT)  # MCU reset pin
-                    GPIO.output(26, GPIO.LOW)
-                    time.sleep(0.1)
-                    GPIO.output(26, GPIO.HIGH)
-                    time.sleep(0.1)
-                except Exception as e:
-                    logger.warning(f"MCU reset failed: {e}")
-                
-                self.picar = Picarx()
-                logger.info("PiCar-X hardware initialized successfully")
-                break
-            except Exception as e:
-                last_error = str(e)
-                if attempt < max_retries - 1:
-                    logger.warning(f"Failed to initialize PiCar-X hardware (attempt {attempt + 1}/{max_retries}): {e}")
-                    time.sleep(retry_delay)
-                else:
-                    logger.error(f"Failed to initialize PiCar-X hardware after {max_retries} attempts: {e}")
-                    logger.error("Please check:")
-                    logger.error("1) You are running with sudo")
-                    logger.error("2) I2C is enabled (sudo raspi-config)")
-                    logger.error("3) Required packages are installed (sudo apt-get install python3-rpi.gpio)")
-                    logger.error("4) Hardware connections are correct")
-                    logger.error(f"Last error: {last_error}")
-                    raise
+        # Try to initialize PiCar-X hardware
+        try:
+            logger.debug("Attempting to initialize PiCar-X hardware...")
+            self.picar = Picarx()
+            logger.info("PiCar-X hardware initialized successfully")
+        except Exception as e:
+            logger.debug(f"Detailed hardware initialization error: {str(e)}", exc_info=True)
+            logger.warning("Hardware initialization failed - some functions may be limited")
         
         # Navigation parameters
         self.min_obstacle_distance = 20.0  # cm
@@ -126,6 +73,30 @@ class NavigationController:
         
         logger.info("Navigation controller initialized")
     
+    def _safe_hardware_call(self, func_name: str, *args, **kwargs):
+        """
+        Safely call a hardware function, logging errors but not crashing.
+        
+        Args:
+            func_name: Name of the PiCar-X function to call
+            *args: Positional arguments for the function
+            **kwargs: Keyword arguments for the function
+            
+        Returns:
+            bool: True if successful, False if failed
+        """
+        if self.picar is None:
+            logger.debug(f"Hardware call to {func_name} skipped - no hardware initialized")
+            return False
+            
+        try:
+            func = getattr(self.picar, func_name)
+            func(*args, **kwargs)
+            return True
+        except Exception as e:
+            logger.debug(f"Hardware call to {func_name} failed: {str(e)}")
+            return False
+    
     def move_forward(self, speed: Optional[float] = None) -> bool:
         """
         Move the robot forward.
@@ -136,13 +107,8 @@ class NavigationController:
         Returns:
             bool: True if command was successful
         """
-        try:
-            speed = speed if speed is not None else self.max_speed
-            self.picar.forward(speed)
-            return True
-        except Exception as e:
-            logger.error(f"Error moving forward: {e}")
-            return False
+        speed = speed if speed is not None else self.max_speed
+        return self._safe_hardware_call('forward', speed)
     
     def move_backward(self, speed: Optional[float] = None) -> bool:
         """
@@ -154,13 +120,8 @@ class NavigationController:
         Returns:
             bool: True if command was successful
         """
-        try:
-            speed = speed if speed is not None else self.max_speed
-            self.picar.backward(speed)
-            return True
-        except Exception as e:
-            logger.error(f"Error moving backward: {e}")
-            return False
+        speed = speed if speed is not None else self.max_speed
+        return self._safe_hardware_call('backward', speed)
     
     def turn_left(self, angle: float = 90) -> bool:
         """
@@ -172,12 +133,7 @@ class NavigationController:
         Returns:
             bool: True if command was successful
         """
-        try:
-            self.picar.set_dir_servo_angle(angle)
-            return True
-        except Exception as e:
-            logger.error(f"Error turning left: {e}")
-            return False
+        return self._safe_hardware_call('set_dir_servo_angle', angle)
     
     def turn_right(self, angle: float = -90) -> bool:
         """
@@ -189,12 +145,7 @@ class NavigationController:
         Returns:
             bool: True if command was successful
         """
-        try:
-            self.picar.set_dir_servo_angle(angle)
-            return True
-        except Exception as e:
-            logger.error(f"Error turning right: {e}")
-            return False
+        return self._safe_hardware_call('set_dir_servo_angle', angle)
     
     def stop(self) -> bool:
         """
@@ -203,22 +154,14 @@ class NavigationController:
         Returns:
             bool: True if command was successful
         """
-        try:
-            self.picar.stop()
-            self.picar.set_dir_servo_angle(0)  # Reset steering
-            return True
-        except Exception as e:
-            logger.error(f"Error stopping: {e}")
-            return False
+        stop_success = self._safe_hardware_call('stop')
+        angle_success = self._safe_hardware_call('set_dir_servo_angle', 0)
+        return stop_success and angle_success
     
     def emergency_stop(self) -> None:
         """Immediately stop all motion."""
-        try:
-            self.picar.stop()
-            self.picar.set_dir_servo_angle(0)
-            logger.critical("Emergency stop executed")
-        except Exception as e:
-            logger.error(f"Error in emergency stop: {e}")
+        self.stop()
+        logger.critical("Emergency stop executed")
     
     def set_speed(self, speed: float) -> bool:
         """
@@ -241,8 +184,6 @@ class NavigationController:
         """Clean up hardware resources."""
         try:
             self.stop()
-            if is_raspberry_pi():
-                GPIO.cleanup()
             logger.info("Navigation system cleaned up")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
