@@ -4,9 +4,11 @@ Processes voice commands and translates them into robot actions.
 """
 
 import re
+import math
 import threading
 from typing import Optional, Dict, Callable, Tuple
 import speech_recognition as sr
+from robot_hat import TTS
 
 from .navigation_module import NavigationController, MovementCommand
 
@@ -21,6 +23,10 @@ class VoiceCommandHandler:
         self._nav = navigation_controller
         self._is_listening = False
         self._command_thread = None
+        
+        # Initialize TTS
+        self._tts = TTS()
+        self._tts.lang("en-US")
         
         # Wake word to activate commands
         self._wake_word = "robot"
@@ -97,6 +103,20 @@ class VoiceCommandHandler:
         if self._command_thread:
             self._command_thread.join()
 
+    def _speak(self, text: str):
+        """
+        Speak the given text using TTS.
+        
+        Args:
+            text: Text to speak
+        """
+        try:
+            self._tts.say(text)
+        except Exception as e:
+            print(f"TTS Error: {e}")
+            # Fallback to print if TTS fails
+            print(text)
+
     def _listening_loop(self):
         """Background thread function for continuous command processing."""
         with sr.Microphone() as source:
@@ -114,15 +134,15 @@ class VoiceCommandHandler:
                     
                     # Check for wake word
                     if self._wake_word in text:
-                        print(self._responses['wake_word'])
+                        self._speak(self._responses['wake_word'])
                         continue
                     
                     # Process command
                     success = self._process_command(text)
                     if success:
-                        print(self._responses['command_success'])
+                        self._speak(self._responses['command_success'])
                     else:
-                        print(self._responses['not_understood'])
+                        self._speak(self._responses['not_understood'])
                         
                 except sr.WaitTimeoutError:
                     continue
@@ -152,7 +172,7 @@ class VoiceCommandHandler:
 
     def _handle_stop(self, match) -> bool:
         """Handle stop command."""
-        print(self._responses['stopping'])
+        self._speak(self._responses['stopping'])
         return self._nav.stop()
 
     def _handle_move(self, match) -> bool:
@@ -166,9 +186,11 @@ class VoiceCommandHandler:
             
             if is_backward:
                 # TODO: Implement backward movement
+                self._speak("Backward movement not yet implemented")
                 return False
             else:
                 # Move forward
+                self._speak(f"Moving forward {distance} centimeters")
                 self._nav.move_forward(self._nav._max_speed/2)
                 return True
         except Exception as e:
@@ -188,6 +210,9 @@ class VoiceCommandHandler:
             is_right = 'right' in match.group(0)
             if is_right:
                 angle = -angle
+                self._speak(f"Turning right {degrees} degrees")
+            else:
+                self._speak(f"Turning left {degrees} degrees")
                 
             return self._nav.turn(angle)
         except Exception as e:
@@ -197,12 +222,13 @@ class VoiceCommandHandler:
     def _handle_explore(self, match) -> bool:
         """Handle exploration command."""
         try:
-            print(self._responses['exploring'])
+            self._speak(self._responses['exploring'])
             
             # Find nearest frontier
             frontier = self._nav.find_nearest_frontier()
             if frontier:
                 return self._nav.navigate_to_point(frontier[0], frontier[1])
+            self._speak("No unexplored areas found")
             return False
         except Exception as e:
             print(f"Error in explore command: {e}")
@@ -212,9 +238,9 @@ class VoiceCommandHandler:
         """Handle status request command."""
         try:
             pose = self._nav.get_pose()
-            status_msg = (f"Current position: {pose.x:.1f} cm forward, "
-                         f"{pose.y:.1f} cm left, facing {math.degrees(pose.theta):.1f} degrees")
-            print(status_msg)
+            status_msg = (f"Current position: {pose.x:.1f} centimeters forward, "
+                         f"{pose.y:.1f} centimeters left, facing {math.degrees(pose.theta):.1f} degrees")
+            self._speak(status_msg)
             return True
         except Exception as e:
             print(f"Error in status command: {e}")
