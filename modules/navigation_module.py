@@ -5,6 +5,7 @@ Optimized navigation module for the PiCar-X robot.
 import numpy as np
 import logging
 import os
+import sys
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 from picarx import Picarx
@@ -19,20 +20,29 @@ logger = logging.getLogger(__name__)
 if geteuid() != 0:
     print("\033[0;33mThe program needs to be run using sudo, otherwise hardware control may fail.\033[0m")
 
-# Try different GPIO backends in order of preference
-gpio_backends = ['rpigpio', 'pigpio', 'native']
-for backend in gpio_backends:
+# Check if running on Raspberry Pi
+def is_raspberry_pi():
     try:
-        os.environ["GPIOZERO_PIN_FACTORY"] = backend
-        # Try to import the backend to verify it works
-        from gpiozero import Device
-        Device.ensure_pin_factory()
-        logger.info(f"Using GPIO backend: {backend}")
-        break
+        with open('/proc/cpuinfo', 'r') as f:
+            return 'Raspberry Pi' in f.read()
+    except:
+        return False
+
+# Configure GPIO based on platform
+if is_raspberry_pi():
+    try:
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        logger.info("Using RPi.GPIO backend")
+    except ImportError:
+        logger.error("RPi.GPIO not found. Please install with: sudo apt-get install python3-rpi.gpio")
+        sys.exit(1)
     except Exception as e:
-        logger.warning(f"Failed to initialize GPIO backend {backend}: {e}")
+        logger.error(f"Failed to initialize GPIO: {e}")
+        sys.exit(1)
 else:
-    logger.error("No suitable GPIO backend found. Please install one of: RPi.GPIO, pigpio, or gpiozero")
+    logger.warning("Not running on a Raspberry Pi - hardware control will be simulated")
 
 @dataclass
 class MovementCommand:
@@ -69,6 +79,20 @@ class NavigationController:
         
         for attempt in range(max_retries):
             try:
+                if not is_raspberry_pi():
+                    logger.warning("Running in simulation mode - no hardware control available")
+                    break
+                
+                # Reset MCU manually before initializing PiCar-X
+                try:
+                    GPIO.setup(26, GPIO.OUT)  # MCU reset pin
+                    GPIO.output(26, GPIO.LOW)
+                    time.sleep(0.1)
+                    GPIO.output(26, GPIO.HIGH)
+                    time.sleep(0.1)
+                except Exception as e:
+                    logger.warning(f"MCU reset failed: {e}")
+                
                 self.picar = Picarx()
                 logger.info("PiCar-X hardware initialized successfully")
                 break
@@ -82,7 +106,8 @@ class NavigationController:
                     logger.error("Please check:")
                     logger.error("1) You are running with sudo")
                     logger.error("2) I2C is enabled (sudo raspi-config)")
-                    logger.error("3) Required packages are installed (sudo apt-get install python3-rpi.gpio python3-pigpio)")
+                    logger.error("3) Required packages are installed (sudo apt-get install python3-rpi.gpio)")
+                    logger.error("4) Hardware connections are correct")
                     logger.error(f"Last error: {last_error}")
                     raise
         
@@ -216,6 +241,8 @@ class NavigationController:
         """Clean up hardware resources."""
         try:
             self.stop()
+            if is_raspberry_pi():
+                GPIO.cleanup()
             logger.info("Navigation system cleaned up")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
