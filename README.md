@@ -1,66 +1,129 @@
-# PiCar-X Robot
+# PiCar-X Robot Explorer
 
-An intelligent autonomous robot system built for the PiCar-X platform, featuring grid-based mapping, voice command capabilities, and ChatGPT integration.
+An autonomous robot exploration system built for the PiCar-X platform, featuring grid-based mapping, voice control, and ChatGPT integration.
 
 ## Features
 
-- Grid-based environment mapping and navigation
-- Voice command control
-- Real-time system monitoring (CPU, temperature, battery)
-- ChatGPT integration for intelligent responses
-- Computer vision capabilities
+- **Autonomous Exploration**: Grid-based mapping and frontier exploration
+- **Voice Control**: Natural language commands for robot control
+- **ChatGPT Integration**: AI-powered decision making and commentary
+- **System Monitoring**: Real-time monitoring of battery, CPU, and system status
+- **Web Interface**: Real-time visualization and control dashboard
 
-## Setup
+## Requirements
 
-1. Clone the repository:
+### Hardware
+- PiCar-X Robot Kit
+- Raspberry Pi 4 (recommended) or 3B+
+- USB Microphone
+- Camera Module (optional)
+
+### Software
+- Python 3.7+
+- Required Python packages listed in `requirements.txt`
+
+## Installation
+
+1. **System Dependencies**
 ```bash
-git clone [your-repo-url]
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-venv portaudio19-dev python3-pyaudio
+```
+
+2. **Project Setup**
+```bash
+# Clone repository
+git clone https://github.com/yourusername/picar-x-robot.git
 cd picar-x-robot
-```
 
-2. Create and activate virtual environment:
-```bash
+# Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Unix/macOS
-# or
-.\venv\Scripts\activate  # On Windows
-```
+source venv/bin/activate
 
-3. Install dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Project Structure
-
-```
-picar_x_robot/
-  ├─ modules/           # Core functionality modules
-  │   ├─ sensor_module.py
-  │   ├─ navigation_module.py
-  │   ├─ chatgpt_integration.py
-  │   ├─ voice_command_handler.py
-  │   ├─ system_monitor.py
-  │   └─ mapping_module.py
-  ├─ tests/            # Test files
-  ├─ main.py          # Main application entry point
-  ├─ requirements.txt  # Project dependencies
-  └─ README.md        # This file
+3. **Configuration**
+```bash
+# Copy example config
+cp config/default_config.yaml config/production.yaml
+# Edit configuration as needed
+nano config/production.yaml
 ```
 
 ## Usage
 
-[Usage instructions will be added as features are implemented]
+1. **Start the Robot**
+```bash
+# Activate virtual environment
+source venv/bin/activate
 
-## Dependencies
+# Run the main program
+python main.py
+```
 
-- Python 3.x
-- See `requirements.txt` for complete list of dependencies
+2. **Voice Commands**
+- "Robot, move forward [distance]"
+- "Robot, turn left/right [degrees]"
+- "Robot, stop"
+- "Robot, explore"
+- "Robot, status"
 
-## License
+3. **Web Interface**
+- Access `http://robot-ip:8080` for the web dashboard
+- View real-time map and sensor data
+- Control robot manually
+- Monitor system status
 
-[Add your chosen license]
+## Development
+
+### Project Structure
+```
+picar-x-robot/
+├── config/                 # Configuration files
+├── modules/               # Core modules
+│   ├── sensor_module.py   # Sensor handling
+│   ├── navigation_module.py # Movement and pathfinding
+│   ├── mapping_module.py  # Grid-based mapping
+│   ├── voice_command_handler.py # Voice control
+│   ├── system_monitor.py  # System monitoring
+│   └── chatgpt_integration.py # AI integration
+├── web/                   # Web interface
+├── tests/                 # Unit tests
+├── main.py               # Main entry point
+└── requirements.txt      # Python dependencies
+```
+
+### Running Tests
+```bash
+python -m pytest tests/
+```
 
 ## Contributing
 
-[Add contribution guidelines if applicable]
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- PiCar-X platform and documentation
+- OpenAI for ChatGPT API
+- Contributors and maintainers
+
+## Version History
+
+- v1.0.0 (2024-01-02)
+  - Initial release
+  - Basic autonomous exploration
+  - Voice command system
+  - ChatGPT integration
+  - System monitoring
+  - Web interface

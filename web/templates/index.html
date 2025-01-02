@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - PiCar-X Robot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- System Metrics -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Metrics</h5>
+            </div>
+            <div class="card-body">
+                <div class="metric-card">
+                    <div class="d-flex justify-content-between">
+                        <span>Battery Voltage</span>
+                        <span class="metric-value" id="batteryVoltage">--</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" id="batteryBar" role="progressbar"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="d-flex justify-content-between">
+                        <span>CPU Temperature</span>
+                        <span class="metric-value" id="cpuTemp">--</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" id="tempBar" role="progressbar"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="d-flex justify-content-between">
+                        <span>CPU Usage</span>
+                        <span class="metric-value" id="cpuUsage">--</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" id="cpuBar" role="progressbar"></div>
+                    </div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="d-flex justify-content-between">
+                        <span>Memory Usage</span>
+                        <span class="metric-value" id="memoryUsage">--</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" id="memoryBar" role="progressbar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Map View -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Navigation Map</h5>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" id="centerMapBtn">
+                        <i class="fas fa-crosshairs"></i> Center
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="clearMapBtn">
+                        <i class="fas fa-eraser"></i> Clear
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="saveMapBtn">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="map-container">
+                    <canvas id="mapCanvas"></canvas>
+                </div>
+                <div class="map-legend mt-2 d-flex justify-content-center">
+                    <div class="me-3">
+                        <span class="legend-color" style="background-color: #28a745"></span>
+                        Free Space
+                    </div>
+                    <div class="me-3">
+                        <span class="legend-color" style="background-color: #dc3545"></span>
+                        Obstacle
+                    </div>
+                    <div class="me-3">
+                        <span class="legend-color" style="background-color: #404040"></span>
+                        Unknown
+                    </div>
+                    <div class="me-3">
+                        <span class="legend-color" style="background-color: #ffc107"></span>
+                        Planned Path
+                    </div>
+                    <div>
+                        <span class="legend-color" style="background-color: #17a2b8"></span>
+                        Robot
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <!-- Camera Feed -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Camera Feed</h5>
+            </div>
+            <div class="card-body">
+                <div class="camera-feed">
+                    <img src="{{ url_for('video_feed') }}" class="w-100">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Log -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Log</h5>
+            </div>
+            <div class="card-body">
+                <div class="log-container" style="height: 300px; overflow-y: auto;">
+                    <div id="logEntries" class="small"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .map-container {
+        aspect-ratio: 1;
+        background-color: #1a1a1a;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    .legend-color {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        margin-right: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Include map visualization script -->
+<script src="{{ url_for('static', filename='js/map_visualization.js') }}"></script>
+
+<script>
+    // Initialize map visualization
+    const mapConfig = {
+        width_cm: {{ config.mapping.width_cm }},
+        height_cm: {{ config.mapping.height_cm }},
+        resolution_cm: {{ config.mapping.resolution_cm }},
+        robot_radius_cm: {{ config.navigation.robot_radius_cm }},
+        free_threshold: {{ config.mapping.free_threshold }},
+        occupied_threshold: {{ config.mapping.occupied_threshold }}
+    };
+    
+    const mapViz = new MapVisualization('mapCanvas', mapConfig);
+    
+    // Map control buttons
+    document.getElementById('centerMapBtn').addEventListener('click', () => {
+        socket.emit('map_command', { command: 'center' });
+    });
+    
+    document.getElementById('clearMapBtn').addEventListener('click', () => {
+        socket.emit('map_command', { command: 'clear' });
+    });
+    
+    document.getElementById('saveMapBtn').addEventListener('click', () => {
+        socket.emit('map_command', { command: 'save' });
+    });
+    
+    // Update system metrics
+    socket.on('status_update', function(data) {
+        // Update battery
+        document.getElementById('batteryVoltage').textContent = 
+            data.battery_voltage.toFixed(1) + 'V';
+        const batteryPercent = ((data.battery_voltage - {{ config.safety.battery.critical_voltage }}) /
+                               ({{ config.safety.battery.warning_voltage }} - {{ config.safety.battery.critical_voltage }})) * 100;
+        const batteryBar = document.getElementById('batteryBar');
+        batteryBar.style.width = batteryPercent + '%';
+        batteryBar.className = 'progress-bar ' + (batteryPercent < 20 ? 'bg-danger' : 'bg-success');
+
+        // Update temperature
+        document.getElementById('cpuTemp').textContent = 
+            data.cpu_temperature.toFixed(1) + '°C';
+        const tempPercent = (data.cpu_temperature / {{ config.safety.temperature.cpu_critical_celsius }}) * 100;
+        const tempBar = document.getElementById('tempBar');
+        tempBar.style.width = tempPercent + '%';
+        tempBar.className = 'progress-bar ' + (tempPercent > 80 ? 'bg-danger' : 'bg-success');
+
+        // Update CPU usage
+        document.getElementById('cpuUsage').textContent = 
+            data.cpu_usage.toFixed(1) + '%';
+        const cpuBar = document.getElementById('cpuBar');
+        cpuBar.style.width = data.cpu_usage + '%';
+        cpuBar.className = 'progress-bar ' + (data.cpu_usage > 90 ? 'bg-danger' : 'bg-success');
+
+        // Update memory usage
+        document.getElementById('memoryUsage').textContent = 
+            data.memory_usage.toFixed(1) + '%';
+        const memoryBar = document.getElementById('memoryBar');
+        memoryBar.style.width = data.memory_usage + '%';
+        memoryBar.className = 'progress-bar ' + (data.memory_usage > 90 ? 'bg-danger' : 'bg-success');
+        
+        // Update robot position on map
+        mapViz.updateRobotPosition(
+            data.position.x,
+            data.position.y,
+            data.orientation
+        );
+    });
+
+    // Update map
+    socket.on('map_update', function(data) {
+        mapViz.updateOccupancyGrid(data.grid);
+        if (data.path) {
+            mapViz.updatePath(data.path);
+        }
+    });
+
+    // Update log
+    socket.on('log_entry', function(data) {
+        const logEntries = document.getElementById('logEntries');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry mb-1';
+        entry.innerHTML = `<span class="text-muted">${new Date(data.timestamp).toLocaleTimeString()}</span> ${data.message}`;
+        logEntries.insertBefore(entry, logEntries.firstChild);
+        
+        // Limit number of entries
+        while (logEntries.children.length > 100) {
+            logEntries.removeChild(logEntries.lastChild);
+        }
+    });
+</script>
+{% endblock %} 

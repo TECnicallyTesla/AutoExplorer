@@ -6,3 +6,4 @@ psutil==5.9.6
 pyttsx3==2.90
 numpy==1.26.2
 requests==2.31.0
+picarx==1.0.2
