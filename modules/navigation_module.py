@@ -73,6 +73,33 @@ class NavigationController:
         
         logger.info("Navigation controller initialized")
     
+    def _generate_motion_primitives(self) -> List[MovementCommand]:
+        """
+        Generate a set of basic motion primitives for navigation.
+        
+        Returns:
+            List[MovementCommand]: List of basic movement commands
+        """
+        primitives = []
+        
+        # Forward movement
+        primitives.append(MovementCommand(
+            linear_speed=self.max_speed,
+            angular_speed=0.0,
+            duration=1.0
+        ))
+        
+        # Turns (left and right)
+        for angle in [-90, 90]:  # degrees
+            primitives.append(MovementCommand(
+                linear_speed=0.0,
+                angular_speed=float(angle),
+                duration=1.0
+            ))
+        
+        logger.debug(f"Generated {len(primitives)} motion primitives")
+        return primitives
+    
     def _safe_hardware_call(self, func_name: str, *args, **kwargs):
         """
         Safely call a hardware function, logging errors but not crashing.
