@@ -4,10 +4,12 @@ Optimized navigation module for the PiCar-X robot.
 
 import numpy as np
 import logging
+import os
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 from picarx import Picarx
 from os import geteuid
+import time
 
 from modules.mapping_module import OccupancyGrid, RobotPose
 
@@ -16,6 +18,9 @@ logger = logging.getLogger(__name__)
 # Check for root privileges
 if geteuid() != 0:
     print("\033[0;33mThe program needs to be run using sudo, otherwise hardware control may fail.\033[0m")
+
+# Set GPIO backend
+os.environ["GPIOZERO_PIN_FACTORY"] = "rpi"
 
 @dataclass
 class MovementCommand:
@@ -45,13 +50,23 @@ class NavigationController:
         self.grid = grid
         self._current_pose = RobotPose(x=0.0, y=0.0, theta=0.0)
         
-        # Initialize PiCar-X hardware
-        try:
-            self.picar = Picarx()
-            logger.info("PiCar-X hardware initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize PiCar-X hardware: {e}")
-            raise
+        # Initialize PiCar-X hardware with retries
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.picar = Picarx()
+                logger.info("PiCar-X hardware initialized successfully")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Failed to initialize PiCar-X hardware (attempt {attempt + 1}/{max_retries}): {e}")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to initialize PiCar-X hardware after {max_retries} attempts: {e}")
+                    logger.error("Please check: 1) You are running with sudo, 2) I2C is enabled, 3) GPIO permissions are set")
+                    raise
         
         # Navigation parameters
         self.min_obstacle_distance = 20.0  # cm
