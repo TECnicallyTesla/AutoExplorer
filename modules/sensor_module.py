@@ -10,19 +10,27 @@ import speech_recognition as sr
 from typing import Optional, Tuple, Dict
 import logging
 from picarx import Picarx  # Import PiCar-X SDK
+from os import geteuid
 
 logger = logging.getLogger(__name__)
+
+# Check for root privileges
+if geteuid() != 0:
+    print("\033[0;33mThe program needs to be run using sudo, otherwise hardware control may fail.\033[0m")
 
 class SensorModule:
     def __init__(self):
         """Initialize sensor systems."""
         # Initialize PiCar-X hardware
+        self.picar = None
         try:
+            logger.debug("Attempting to initialize PiCar-X hardware...")
             self.picar = Picarx()
             logger.info("PiCar-X hardware initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize PiCar-X hardware: {e}")
-            raise
+            logger.debug("Detailed hardware initialization error:", exc_info=True)
+            logger.warning("Hardware initialization failed - some functions may be limited")
 
         # Threading control
         self._running = False
@@ -51,13 +59,17 @@ class SensorModule:
 
     def _init_proximity_sensor(self):
         """Initialize the proximity sensor hardware."""
+        if self.picar is None:
+            logger.warning("Skipping proximity sensor initialization - no hardware available")
+            return
+            
         try:
             # Configure ultrasonic sensors
             self.picar.set_grayscale_reference(1000)  # Set grayscale reference value
             logger.info("Proximity sensors initialized")
         except Exception as e:
             logger.error(f"Error initializing proximity sensors: {e}")
-            raise
+            logger.debug("Detailed proximity sensor error:", exc_info=True)
 
     def _init_camera(self):
         """Initialize the camera hardware."""
@@ -72,10 +84,27 @@ class SensorModule:
             logger.info("Camera initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing camera: {e}")
+            logger.debug("Detailed camera error:", exc_info=True)
             self._camera = None
+
+    def _init_microphone(self):
+        """Initialize the microphone."""
+        try:
+            # Try to initialize microphone
+            with sr.Microphone() as mic:
+                self._microphone = mic
+                logger.info("Microphone initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing microphone: {e}")
+            logger.debug("Detailed microphone error:", exc_info=True)
+            self._microphone = None
 
     def start_proximity_polling(self):
         """Start the proximity sensor polling in a background thread."""
+        if self.picar is None:
+            logger.warning("Cannot start proximity polling - no hardware available")
+            return
+            
         if self._proximity_thread is None or not self._proximity_thread.is_alive():
             self._running = True
             self._proximity_thread = threading.Thread(target=self._proximity_polling_loop)
@@ -94,6 +123,11 @@ class SensorModule:
         """Background thread function for polling proximity sensors."""
         while self._running:
             try:
+                if self.picar is None:
+                    logger.warning("No hardware available for proximity polling")
+                    time.sleep(1)
+                    continue
+                    
                 # Read ultrasonic sensors
                 left_distance = self.picar.get_grayscale_data()[0]
                 center_distance = self.picar.get_grayscale_data()[1]
@@ -137,8 +171,9 @@ class SensorModule:
             self._camera.release()
             
         # Cleanup PiCar-X hardware
-        try:
-            self.picar.stop()
-            logger.info("PiCar-X hardware cleaned up")
-        except Exception as e:
-            logger.error(f"Error during PiCar-X cleanup: {e}")
+        if self.picar is not None:
+            try:
+                self.picar.stop()
+                logger.info("PiCar-X hardware cleaned up")
+            except Exception as e:
+                logger.error(f"Error during PiCar-X cleanup: {e}")
